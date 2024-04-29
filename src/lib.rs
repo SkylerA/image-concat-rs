@@ -31,7 +31,13 @@ pub fn load_and_vert_concat_images(
     // Loop through images creating decoders w/o actually reading the images yet
     let mut decoders = Vec::new();
     for path in image_paths {
-        let img = ImageReader::open(path)?;
+        let img = ImageReader::open(path).map_err(|err| {
+            std::io::Error::new(
+                err.kind(),
+                format!("Error opening image {}: {}", path.to_str().unwrap(), err),
+            )
+        })?;
+
         let decoder = img.into_decoder()?;
 
         // Track dimensions so we can pre-allocate an ImageBuffer to contain all images
