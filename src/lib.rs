@@ -130,7 +130,7 @@ pub fn load_and_column_concat_images(
         start = end;
     }
 
-    Ok(concat_images(&col_buffs, ConcatDirection::Horizontal)?)
+    concat_images(&col_buffs, ConcatDirection::Horizontal)
 }
 
 pub enum ConcatDirection {
