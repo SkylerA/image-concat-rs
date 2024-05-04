@@ -6,8 +6,6 @@ use image::{GenericImage, ImageBuffer, ImageDecoder, Rgb};
 
 // TODO Make Image type more generic
 
-// NOTE: This currently assumes images are the same dimensions
-
 /// Loads given images and vertically concatenates them.
 /// Images are directly decoded into a single ImageBuffer to avoid unnecessary copying.
 ///
@@ -137,6 +135,7 @@ pub enum ConcatDirection {
     Vertical,
     Horizontal,
 }
+
 /// Concatenates images vertically or horizontally
 ///
 /// # Arguments
@@ -157,48 +156,183 @@ pub fn concat_images(
     images: &[ImageBuffer<Rgb<u8>, Vec<u8>>],
     direction: ConcatDirection,
 ) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
-    match direction {
-        ConcatDirection::Vertical => {
-            // Find the max width and total height of all images
-            let (max_width, total_height) =
-                images
-                    .iter()
-                    .fold((0, 0), |(max_width, total_height), img| {
-                        (max(max_width, img.width()), total_height + img.height())
-                    });
+    let blits = get_concat_blits(images, direction, 0, 0);
+    place_images_in_buffer(&blits)
+}
 
-            let mut buffer = ImageBuffer::new(max_width, total_height);
+pub struct ImageBlit<'a> {
+    pub img: &'a ImageBuffer<Rgb<u8>, Vec<u8>>,
+    pub x: u32,
+    pub y: u32,
+    // TODO could probably add origin pretty easily.
+    // - One complication that comes to mind is a non top left origin on left or
+    //   top boundary would cause the image buffer to grow to accomodate which
+    //   would then offset all other image placements. Would need to add logic
+    //   to clip images probably.
+}
 
-            // Copy each image into the final buffer
-            let mut write_start = 0;
-            for img in images {
-                let write_end = write_start + img.height();
-                buffer.copy_from(img, 0, write_start)?;
-                write_start = write_end;
-            }
+/// Places images into a single buffer
+///   
+/// The list of images and placements will be scanned to determine the total size
+/// of the buffer then all images will be copied into the buffer.
+///
+/// The goal of this function is to enable direction agnostic concatenation with
+/// as few copies as possible. For example, instead of doing column concatenation
+/// by creating a column of images and then horizontally concatenating them,
+/// which would require an unnecessary copy of the columns into the final
+/// horizontal alignment, this takes all the desired placements and copies them
+/// into a single buffer.
+///
+/// # Arguments
+/// * `images` - Slice of ImageBlit structs which contain an image ref and target
+/// coordinate to place the top left of the image
+///
+/// # Returns
+/// * `ImageBuffer<Rgb<u8>, Vec<u8>>` - Single buffer containing all images
+///
+/// # Example
+/// ```
+/// use image_concat_rs::{place_images_in_buffer,ImageBlit};
+/// let img1 = image::open("./test/1.png").unwrap().into_rgb8();
+/// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
+/// let img_result = place_images_in_buffer(&[ImageBlit{img: &img1, x: 0, y: 0}, ImageBlit{img: &img2, x: img1.width(), y: 0}]);
+/// ```
+pub fn place_images_in_buffer(
+    images: &[ImageBlit],
+) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+    // Each each images start point and dimensions to determine the total buffer size we'll need to contain everything
+    let (total_width, total_height) =
+        images.iter().fold((0, 0), |(max_width, max_height), blit| {
+            (
+                max(max_width, blit.x + blit.img.width()),
+                max(max_height, blit.y + blit.img.height()),
+            )
+        });
 
-            Ok(buffer)
-        }
-        ConcatDirection::Horizontal => {
-            // Find the total width and max height of all images
-            let (total_width, max_height) =
-                images
-                    .iter()
-                    .fold((0, 0), |(total_width, max_height), img| {
-                        (total_width + img.width(), max(max_height, img.height()))
-                    });
+    // Create an image buffer large enough to contain all images
+    let mut buffer = ImageBuffer::new(total_width, total_height);
 
-            let mut buffer = ImageBuffer::new(total_width, max_height);
-
-            // Copy each image into the final buffer
-            let mut write_start = 0;
-            for img in images {
-                let write_end = write_start + img.width();
-                buffer.copy_from(img, write_start, 0)?;
-                write_start = write_end;
-            }
-
-            Ok(buffer)
-        }
+    // Copy each image into the final buffer
+    for blit in images {
+        buffer.copy_from(blit.img, blit.x, blit.y)?;
     }
+
+    Ok(buffer)
+}
+
+/// Creates a list of ImageBlit structs
+///
+/// Takes start location and concat direction to create blits that will vertically or horizontally cocnatenate images
+///
+/// # Arguments
+/// * `images` - Slice of images to concatenate
+/// * `concat_direction` - ConcatDirection::Vertical or ConcatDirection::Horizontal
+/// * `start_y` - y coord that the origin of the first image will be placed
+/// * `start_x` - x coord that the origin of the first image will be placed
+///
+/// # Returns
+/// * Vec of ImageBlit structs that can be passed to place_images_in_buffer to draw all images to a single buffer
+///
+/// # Example
+/// ```
+/// use image_concat_rs::{get_concat_blits, ConcatDirection};
+/// let img1 = image::open("./test/1.png").unwrap().into_rgb8();
+/// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
+/// let blits = get_concat_blits(&[img1,img2], ConcatDirection::Vertical, 0, 0);
+/// ```
+pub fn get_concat_blits(
+    images: &[ImageBuffer<Rgb<u8>, Vec<u8>>],
+    concat_direction: ConcatDirection,
+    start_y: u32,
+    start_x: u32,
+) -> Vec<ImageBlit> {
+    // Strep through each image and create an ImageBlit with start relative to the previous image's width or height depending on the concat direction
+    let (blits, _) = images.iter().fold(
+        (Vec::new(), (start_x, start_y)),
+        |(mut blits, (x, y)), img| {
+            let blit = ImageBlit { img, x, y };
+            blits.push(blit);
+            match concat_direction {
+                ConcatDirection::Vertical => (blits, (x, y + img.height())),
+                ConcatDirection::Horizontal => (blits, (x + img.width(), y)),
+            }
+        },
+    );
+
+    blits
+}
+
+/// Concatenates images into columns
+///
+/// This will take already loaded images and concatenate them in vertical columns.
+///
+/// Given a desired number of columns, it will divde them as evenly as possible,
+/// placing what will evenly divide into all columns and spreading the remainders
+/// across the front columns.
+///
+/// The order is currently top to bottom, moving to the next column from left to right.
+/// This order might change as it makes knowing where empty rows are a bit unintuitive.
+///
+/// # Arguments
+/// * `images` - Slice of ImageBuffers to concatenate in columns
+/// * `columns` - Number of columns to split images into
+///
+/// # Returns
+/// * `Result<ImageBuffer<Rgb<u8>, Vec<u8>, image::ImageError>`
+///
+/// # Example
+/// ```
+/// use image_concat_rs::{concat_images, ConcatDirection};
+/// let img1 = image::open("./test/1.png").unwrap().into_rgb8();
+/// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
+/// let img_result = concat_images(&[img1,img2], ConcatDirection::Vertical);
+/// ```
+pub fn column_concat_images(
+    images: &[ImageBuffer<Rgb<u8>, Vec<u8>>],
+    columns: usize,
+) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+    let num_images = images.len();
+
+    // Max number of images per column
+    let chunk_size = num_images / columns;
+    // Starting index of columns that will have less images
+    let chunk_remainder = num_images % columns;
+
+    // vec of ImageBlit instructions we will execute all at once after planning the columns
+    let mut blits = Vec::with_capacity(num_images);
+
+    // Build column image blits
+    let mut start = 0;
+    let mut x = 0;
+    for idx in 0..columns {
+        // Determine if this is a full size column or a partial column
+        let chunk_size = if idx < chunk_remainder {
+            chunk_size + 1
+        } else {
+            chunk_size
+        };
+        let end = start + chunk_size;
+
+        // create a list of ImageBlits to draw a column of images
+        let col_blits = get_concat_blits(&images[start..end], ConcatDirection::Vertical, x, 0);
+
+        // determine x coord of next column by finding the widest blit
+        let max_width = col_blits
+            .iter()
+            .map(|blit| blit.x + blit.img.width())
+            .max()
+            .unwrap();
+
+        // add blits to blit buffer
+        blits.extend(col_blits);
+
+        // set next column starting x coord
+        x += max_width;
+
+        // update image index
+        start = end;
+    }
+
+    // execute all blits
+    place_images_in_buffer(&blits)
 }
