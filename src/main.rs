@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use image::{ImageBuffer, Rgb};
 use image_concat_rs::{
-    column_concat_images, concat_images, load_and_column_concat_images, load_and_vert_concat_images,
+    column_concat_images, concat_images, load_and_column_concat_images,
+    load_and_vert_concat_images, ConcatDirection,
 };
 
 fn save_img(img: ImageBuffer<Rgb<u8>, Vec<u8>>, save_path: &str) {
@@ -39,10 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     // Concat ImageBuffers Horizontally
-    let img = concat_images(&imgs, image_concat_rs::ConcatDirection::Vertical)?;
+    let img = concat_images(&imgs, ConcatDirection::Vertical)?;
     save_img(img, "./concat_images_vert.png");
     // Concat ImageBuffers Vertically
-    let img = concat_images(&imgs, image_concat_rs::ConcatDirection::Horizontal)?;
+    let img = concat_images(&imgs, ConcatDirection::Horizontal)?;
     save_img(img, "./concat_images_horiz.png");
     // Concat ImageBuffers into 5 columns
     let img = column_concat_images(&imgs, 5)?;
