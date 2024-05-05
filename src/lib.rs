@@ -2,9 +2,7 @@ use std::cmp::max;
 use std::path::PathBuf;
 
 use image::io::Reader as ImageReader;
-use image::{GenericImage, ImageBuffer, ImageDecoder, Rgb};
-
-// TODO Make Image type more generic
+use image::{GenericImage, ImageBuffer, ImageDecoder, Pixel, Rgb};
 
 /// Loads given images and vertically concatenates them.
 /// Images are directly decoded into a single ImageBuffer to avoid unnecessary copying.
@@ -136,14 +134,14 @@ pub enum ConcatDirection {
     Horizontal,
 }
 
-/// Concatenates images vertically or horizontally
+/// Concatenates ImageBuffers vertically or horizontally
 ///
 /// # Arguments
-/// * `images` - Slice of PathBufs to images to load
+/// * `images` - Slice of ImageBuffers to concatenate
 /// * `direction` - ConcatDirection::Vertical or ConcatDirection::Horizontal
 ///
 /// # Returns
-/// * `Result<ImageBuffer<Rgb<u8>, Vec<u8>, image::ImageError>`
+/// * `Result<ImageBuffer, image::ImageError>`
 ///
 /// # Example
 /// ```
@@ -152,16 +150,16 @@ pub enum ConcatDirection {
 /// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
 /// let img_result = concat_images(&[img1,img2], ConcatDirection::Vertical);
 /// ```
-pub fn concat_images(
-    images: &[ImageBuffer<Rgb<u8>, Vec<u8>>],
+pub fn concat_images<P: Pixel>(
+    images: &[ImageBuffer<P, Vec<P::Subpixel>>],
     direction: ConcatDirection,
-) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+) -> Result<ImageBuffer<P, Vec<P::Subpixel>>, image::ImageError> {
     let blits = get_concat_blits(images, direction, 0, 0);
     place_images_in_buffer(&blits)
 }
 
-pub struct ImageBlit<'a> {
-    pub img: &'a ImageBuffer<Rgb<u8>, Vec<u8>>,
+pub struct ImageBlit<'a, P: Pixel> {
+    pub img: &'a ImageBuffer<P, Vec<P::Subpixel>>,
     pub x: u32,
     pub y: u32,
     // TODO could probably add origin pretty easily.
@@ -171,7 +169,7 @@ pub struct ImageBlit<'a> {
     //   to clip images probably.
 }
 
-/// Places images into a single buffer
+/// Places ImageBuffers into a single buffer
 ///   
 /// The list of images and placements will be scanned to determine the total size
 /// of the buffer then all images will be copied into the buffer.
@@ -184,11 +182,11 @@ pub struct ImageBlit<'a> {
 /// into a single buffer.
 ///
 /// # Arguments
-/// * `images` - Slice of ImageBlit structs which contain an image ref and target
-/// coordinate to place the top left of the image
+/// * `images` - Slice of ImageBlit structs which contain an ImageBuffer ref and
+///  target coordinate to place the top left of the image
 ///
 /// # Returns
-/// * `ImageBuffer<Rgb<u8>, Vec<u8>>` - Single buffer containing all images
+/// * `ImageBuffer` - Single ImageBuffer containing all images
 ///
 /// # Example
 /// ```
@@ -197,9 +195,9 @@ pub struct ImageBlit<'a> {
 /// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
 /// let img_result = place_images_in_buffer(&[ImageBlit{img: &img1, x: 0, y: 0}, ImageBlit{img: &img2, x: img1.width(), y: 0}]);
 /// ```
-pub fn place_images_in_buffer(
-    images: &[ImageBlit],
-) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+pub fn place_images_in_buffer<P: Pixel>(
+    images: &[ImageBlit<P>],
+) -> Result<ImageBuffer<P, Vec<P::Subpixel>>, image::ImageError> {
     // Each each images start point and dimensions to determine the total buffer size we'll need to contain everything
     let (total_width, total_height) =
         images.iter().fold((0, 0), |(max_width, max_height), blit| {
@@ -220,12 +218,12 @@ pub fn place_images_in_buffer(
     Ok(buffer)
 }
 
-/// Creates a list of ImageBlit structs
+/// Creates a Vector of ImageBlit structs
 ///
-/// Takes start location and concat direction to create blits that will vertically or horizontally cocnatenate images
+/// Takes start location and concat direction to create blits that will vertically or horizontally cocnatenate ImageBuffers
 ///
 /// # Arguments
-/// * `images` - Slice of images to concatenate
+/// * `images` - Slice of ImageBuffers to concatenate
 /// * `concat_direction` - ConcatDirection::Vertical or ConcatDirection::Horizontal
 /// * `start_y` - y coord that the origin of the first image will be placed
 /// * `start_x` - x coord that the origin of the first image will be placed
@@ -240,12 +238,12 @@ pub fn place_images_in_buffer(
 /// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
 /// let blits = get_concat_blits(&[img1,img2], ConcatDirection::Vertical, 0, 0);
 /// ```
-pub fn get_concat_blits(
-    images: &[ImageBuffer<Rgb<u8>, Vec<u8>>],
+pub fn get_concat_blits<P: Pixel>(
+    images: &[ImageBuffer<P, Vec<P::Subpixel>>],
     concat_direction: ConcatDirection,
     start_y: u32,
     start_x: u32,
-) -> Vec<ImageBlit> {
+) -> Vec<ImageBlit<P>> {
     // Strep through each image and create an ImageBlit with start relative to the previous image's width or height depending on the concat direction
     let (blits, _) = images.iter().fold(
         (Vec::new(), (start_x, start_y)),
@@ -278,7 +276,7 @@ pub fn get_concat_blits(
 /// * `columns` - Number of columns to split images into
 ///
 /// # Returns
-/// * `Result<ImageBuffer<Rgb<u8>, Vec<u8>, image::ImageError>`
+/// * `Result<ImageBuffer, image::ImageError>`
 ///
 /// # Example
 /// ```
@@ -287,10 +285,10 @@ pub fn get_concat_blits(
 /// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
 /// let img_result = concat_images(&[img1,img2], ConcatDirection::Vertical);
 /// ```
-pub fn column_concat_images(
-    images: &[ImageBuffer<Rgb<u8>, Vec<u8>>],
+pub fn column_concat_images<P: Pixel>(
+    images: &[ImageBuffer<P, Vec<P::Subpixel>>],
     columns: usize,
-) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+) -> Result<ImageBuffer<P, Vec<P::Subpixel>>, image::ImageError> {
     let num_images = images.len();
 
     // Max number of images per column
