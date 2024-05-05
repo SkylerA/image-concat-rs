@@ -241,8 +241,8 @@ pub fn place_images_in_buffer<P: Pixel>(
 pub fn get_concat_blits<P: Pixel>(
     images: &[ImageBuffer<P, Vec<P::Subpixel>>],
     concat_direction: ConcatDirection,
-    start_y: u32,
     start_x: u32,
+    start_y: u32,
 ) -> Vec<ImageBlit<P>> {
     // Strep through each image and create an ImageBlit with start relative to the previous image's width or height depending on the concat direction
     let (blits, _) = images.iter().fold(
@@ -320,6 +320,8 @@ pub fn column_concat_images<P: Pixel>(
             .map(|blit| blit.x + blit.img.width())
             .max()
             .unwrap();
+        // account for current x coord so only current image width is considered
+        let max_width = max_width - x;
 
         // add blits to blit buffer
         blits.extend(col_blits);
