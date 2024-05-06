@@ -2,7 +2,7 @@ use std::cmp::max;
 use std::path::PathBuf;
 
 use image::io::Reader as ImageReader;
-use image::{GenericImage, ImageBuffer, ImageDecoder, Pixel, Rgb};
+use image::{GenericImage, ImageBuffer, ImageDecoder, Pixel, RgbImage};
 
 /// Loads given images and vertically concatenates them.
 /// Images are directly decoded into a single ImageBuffer to avoid unnecessary copying.
@@ -11,7 +11,7 @@ use image::{GenericImage, ImageBuffer, ImageDecoder, Pixel, Rgb};
 /// * `image_paths` - Slice of PathBufs to images to load
 ///
 /// # Returns
-/// * `ImageBuffer<Rgb<u8>, Vec<u8>>`
+/// * `RgbImage`
 ///
 /// # Example
 /// ```
@@ -21,9 +21,7 @@ use image::{GenericImage, ImageBuffer, ImageDecoder, Pixel, Rgb};
 /// // or
 /// let img_result = load_and_vert_concat_images(&[PathBuf::from("./test/1.png"), PathBuf::from("./test/2.png")]);
 /// ```
-pub fn load_and_vert_concat_images(
-    image_paths: &[PathBuf],
-) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+pub fn load_and_vert_concat_images(image_paths: &[PathBuf]) -> Result<RgbImage, image::ImageError> {
     let mut total_height = 0;
     let mut max_width = 0;
 
@@ -48,7 +46,7 @@ pub fn load_and_vert_concat_images(
     }
 
     // Make an image buffer large enough to contain all images
-    let mut buffer: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::new(max_width, total_height);
+    let mut buffer: RgbImage = ImageBuffer::new(max_width, total_height);
 
     // Loop through decoders, decoding directly into ImageBuffer
     let mut byte_start: u64 = 0;
@@ -80,7 +78,7 @@ pub fn load_and_vert_concat_images(
 /// * `columns` - number of columns to split images into
 ///
 /// # Returns
-/// * `ImageBuffer<Rgb<u8>, Vec<u8>>`
+/// * `RgbImage`
 ///
 /// # Example
 /// ```
@@ -91,7 +89,7 @@ pub fn load_and_vert_concat_images(
 pub fn load_and_column_concat_images(
     image_paths: &[PathBuf],
     columns: usize,
-) -> Result<ImageBuffer<Rgb<u8>, Vec<u8>>, image::ImageError> {
+) -> Result<RgbImage, image::ImageError> {
     // Vertical concatenation is more performant than horizontal because we can use the contiguous
     // nature of the memory to directly decode images into a final buffer one after another without
     // making copies of data. Horitontal concatenation would require decoding one row of each image

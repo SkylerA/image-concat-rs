@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use image::{ImageBuffer, Rgb};
+use image::RgbImage;
 use image_concat_rs::{
     column_concat_images, concat_images, load_and_column_concat_images,
     load_and_vert_concat_images, ConcatDirection,
 };
 
-fn save_img(img: ImageBuffer<Rgb<u8>, Vec<u8>>, save_path: &str) {
+fn save_img(img: RgbImage, save_path: &str) {
     match img.save_with_format(save_path, image::ImageFormat::Png) {
         Ok(_) => println!("Saved image to {save_path}"),
         Err(err) => println!("Error saving to {save_path}: {err}"),
