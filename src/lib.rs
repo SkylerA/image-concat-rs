@@ -294,6 +294,8 @@ pub fn column_concat_images<P: Pixel>(
     let chunk_size = num_images / columns;
     // Starting index of columns that will have less images
     let chunk_remainder = num_images % columns;
+    // create blank image the size of the first column
+    let blank_col = ImageBuffer::new(images[0].width(), images[0].height());
 
     // vec of ImageBlit instructions we will execute all at once after planning the columns
     let mut blits = Vec::with_capacity(num_images);
@@ -310,13 +312,17 @@ pub fn column_concat_images<P: Pixel>(
         };
         let end = start + chunk_size;
 
-        // Exit early if there are no images in this column
-        if end >= num_images {
-            break;
-        }
-
-        // create a list of ImageBlits to draw a column of images
-        let col_blits = get_concat_blits(&images[start..end], ConcatDirection::Vertical, x, 0);
+        // Add an empty image if more columns than images were requested
+        let col_blits = if start >= num_images {
+            vec![ImageBlit {
+                img: &blank_col,
+                x,
+                y: 0,
+            }]
+        } else {
+            // create a list of ImageBlits to draw a column of images
+            get_concat_blits(&images[start..end], ConcatDirection::Vertical, x, 0)
+        };
 
         // determine x coord of next column by finding the widest blit
         let max_width = col_blits
@@ -342,8 +348,6 @@ pub fn column_concat_images<P: Pixel>(
 }
 
 mod tests {
-    use crate::load_and_column_concat_images;
-
     #[test]
     fn test_concat_images() {
         let imgs = vec![
