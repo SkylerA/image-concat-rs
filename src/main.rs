@@ -49,5 +49,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let img = column_concat_images(&imgs, 5)?;
     save_img(img, "./column_concat_images.png");
 
+    // Concat ImageBuffers into 1 too many columns
+    let img = column_concat_images(&imgs, imgs.len() + 1)?;
+    save_img(img, "./column_concat_images_unbalanced.png");
+
     Ok(())
 }

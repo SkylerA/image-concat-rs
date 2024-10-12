@@ -278,10 +278,11 @@ pub fn get_concat_blits<P: Pixel>(
 ///
 /// # Example
 /// ```
-/// use image_concat_rs::{concat_images, ConcatDirection};
+/// use image_concat_rs::{column_concat_images, ConcatDirection};
 /// let img1 = image::open("./test/1.png").unwrap().into_rgb8();
 /// let img2 = image::open("./test/2.png").unwrap().into_rgb8();
-/// let img_result = concat_images(&[img1,img2], ConcatDirection::Vertical);
+/// let img_result = column_concat_images(&[img1,img2], 2);
+///
 /// ```
 pub fn column_concat_images<P: Pixel>(
     images: &[ImageBuffer<P, Vec<P::Subpixel>>],
@@ -309,6 +310,11 @@ pub fn column_concat_images<P: Pixel>(
         };
         let end = start + chunk_size;
 
+        // Exit early if there are no images in this column
+        if end >= num_images {
+            break;
+        }
+
         // create a list of ImageBlits to draw a column of images
         let col_blits = get_concat_blits(&images[start..end], ConcatDirection::Vertical, x, 0);
 
@@ -333,4 +339,30 @@ pub fn column_concat_images<P: Pixel>(
 
     // execute all blits
     place_images_in_buffer(&blits)
+}
+
+mod tests {
+    use crate::load_and_column_concat_images;
+
+    #[test]
+    fn test_concat_images() {
+        let imgs = vec![
+            image::open("./test/1.png").unwrap().into_rgb8(),
+            image::open("./test/2.png").unwrap().into_rgb8(),
+        ];
+        let expected_w = imgs.iter().map(|img| img.width()).max().unwrap();
+        let expected_h: u32 = imgs.iter().map(|img| img.height()).sum();
+
+        let img_result = super::concat_images(&imgs, super::ConcatDirection::Vertical).unwrap();
+        // TODO maybe check against gold images
+        assert_eq!(img_result.width(), expected_w);
+        assert_eq!(img_result.height(), expected_h);
+    }
+
+    #[test]
+    fn test_column_concat_images_unbalanced() {
+        let single_img = vec![image::open("./test/1.png").unwrap().into_rgb8()];
+        // request concatting 2 columns, but only pass 1 image
+        let _img_result = super::column_concat_images(&single_img, 2).unwrap();
+    }
 }
